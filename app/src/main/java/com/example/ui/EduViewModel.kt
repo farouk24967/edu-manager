@@ -23,6 +23,23 @@ class EduViewModel(application: Application) : AndroidViewModel(application) {
     val documents = repository.allDocuments.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val messages = repository.allMessages.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // --- Secure Auth & Session States ---
+    val authManager = AuthManager(application, repository)
+
+    private val _currentUser = MutableStateFlow<User?>(null)
+    val currentUser: StateFlow<User?> = _currentUser.asStateFlow()
+
+    private val _authError = MutableStateFlow<String?>(null)
+    val authError: StateFlow<String?> = _authError.asStateFlow()
+
+    private val _isAuthLoading = MutableStateFlow(false)
+    val isAuthLoading: StateFlow<Boolean> = _isAuthLoading.asStateFlow()
+
+    val isFirebaseOnline = authManager.isFirebaseOnline
+
+    // --- Appointments State Flow ---
+    val appointments = repository.allAppointments.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // --- UI/Onboarding State Flows ---
     private val _userType = MutableStateFlow<String?>(null)
     val userType: StateFlow<String?> = _userType.asStateFlow()
@@ -217,6 +234,73 @@ class EduViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sendMessage(message: AppMessage) {
         viewModelScope.launch { repository.insertMessage(message) }
+    }
+
+    // --- Authentication Actions ---
+    fun registerUser(email: String, passwordHash: String, fullName: String, role: String) {
+        _isAuthLoading.value = true
+        _authError.value = null
+        viewModelScope.launch {
+            authManager.signUp(email, passwordHash, fullName, role,
+                onSuccess = { user ->
+                    _currentUser.value = user
+                    _isAuthLoading.value = false
+                    // Update user type setting based on role
+                    viewModelScope.launch {
+                        repository.saveSetting("user_type", user.role)
+                        _userType.value = user.role
+                    }
+                },
+                onFailure = { error ->
+                    _authError.value = error
+                    _isAuthLoading.value = false
+                }
+            )
+        }
+    }
+
+    fun loginUser(email: String, passwordHash: String) {
+        _isAuthLoading.value = true
+        _authError.value = null
+        viewModelScope.launch {
+            authManager.signIn(email, passwordHash,
+                onSuccess = { user ->
+                    _currentUser.value = user
+                    _isAuthLoading.value = false
+                    // Update user type setting based on role
+                    viewModelScope.launch {
+                        repository.saveSetting("user_type", user.role)
+                        _userType.value = user.role
+                    }
+                },
+                onFailure = { error ->
+                    _authError.value = error
+                    _isAuthLoading.value = false
+                }
+            )
+        }
+    }
+
+    fun logoutUser() {
+        _currentUser.value = null
+        _authError.value = null
+    }
+
+    fun clearAuthError() {
+        _authError.value = null
+    }
+
+    // --- Appointments Operations ---
+    fun addAppointment(appointment: Appointment) {
+        viewModelScope.launch {
+            repository.insertAppointment(appointment)
+        }
+    }
+
+    fun deleteAppointment(id: Int) {
+        viewModelScope.launch {
+            repository.deleteAppointment(id)
+        }
     }
 
     fun setLanguage(lang: String) {

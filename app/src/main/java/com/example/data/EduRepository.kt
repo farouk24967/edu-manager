@@ -58,4 +58,13 @@ class EduRepository(private val dao: EduDao) {
     // Messages
     val allMessages: Flow<List<AppMessage>> = dao.getAllMessagesFlow()
     suspend fun insertMessage(message: AppMessage): Long = dao.insertMessage(message)
+
+    // Users
+    suspend fun getUserByEmail(email: String): User? = dao.getUserByEmail(email)
+    suspend fun insertUser(user: User): Long = dao.insertUser(user)
+
+    // Appointments
+    val allAppointments: Flow<List<Appointment>> = dao.getAllAppointmentsFlow()
+    suspend fun insertAppointment(appointment: Appointment): Long = dao.insertAppointment(appointment)
+    suspend fun deleteAppointment(id: Int) = dao.deleteAppointmentById(id)
 }

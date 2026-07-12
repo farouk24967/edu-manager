@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.EduViewModel
+import com.example.ui.screens.AuthScreen
 import com.example.ui.screens.MainAppScreen
 import com.example.ui.screens.WelcomeScreen
 import com.example.ui.theme.MyApplicationTheme
@@ -22,8 +23,11 @@ class MainActivity : ComponentActivity() {
       MyApplicationTheme {
         val viewModel: EduViewModel = viewModel()
         val onboardingStep by viewModel.onboardingStep.collectAsState()
+        val currentUser by viewModel.currentUser.collectAsState()
 
-        if (onboardingStep < 4) {
+        if (currentUser == null) {
+          AuthScreen(viewModel = viewModel, modifier = Modifier.fillMaxSize())
+        } else if (onboardingStep < 4) {
           WelcomeScreen(viewModel = viewModel, modifier = Modifier.fillMaxSize())
         } else {
           MainAppScreen(viewModel = viewModel, modifier = Modifier.fillMaxSize())

@@ -16,9 +16,11 @@ import androidx.room.RoomDatabase
         Exam::class,
         Grade::class,
         Document::class,
-        AppMessage::class
+        AppMessage::class,
+        User::class,
+        Appointment::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

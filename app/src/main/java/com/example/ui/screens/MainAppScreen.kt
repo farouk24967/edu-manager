@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -1298,47 +1299,206 @@ fun GroupsPane(
 // --- 4. PLANNING PANE ---
 @Composable
 fun PlanningPane(viewModel: EduViewModel, groups: List<SchoolGroup>) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        Text("Emploi du Temps / Calendrier", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Spacer(modifier = Modifier.height(12.dp))
+    val students by viewModel.students.collectAsState()
+    val appointments by viewModel.appointments.collectAsState()
 
-        // Weekdays horizontal slider mockup
+    var selectedDay by remember { mutableStateOf(12) } // default active day
+    var selectedMonth by remember { mutableStateOf(7) } // July
+    var selectedYear by remember { mutableStateOf(2026) }
+
+    var showAddDialog by remember { mutableStateOf(false) }
+
+    // Helpers to compute days in month and start weekday
+    val daysInMonth = when (selectedMonth) {
+        2 -> if (selectedYear % 4 == 0) 29 else 28
+        4, 6, 9, 11 -> 30
+        else -> 31
+    }
+
+    val calendarHelper = java.util.Calendar.getInstance().apply {
+        set(java.util.Calendar.YEAR, selectedYear)
+        set(java.util.Calendar.MONTH, selectedMonth - 1)
+        set(java.util.Calendar.DAY_OF_MONTH, 1)
+    }
+    // Convert Sunday=1, Monday=2 to 0=Monday, ..., 6=Sunday
+    val startDayOfWeek = (calendarHelper.get(java.util.Calendar.DAY_OF_WEEK) + 5) % 7
+
+    val monthNames = listOf(
+        "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+        "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
+    )
+
+    val currentFormattedDate = String.format("%04d-%02d-%02d", selectedYear, selectedMonth, selectedDay)
+
+    // Filter appointments for the selected day
+    val activeAppointments = appointments.filter { it.date == currentFormattedDate }
+
+    Column(modifier = Modifier.fillMaxSize()) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            listOf("Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche").forEach { dayName ->
-                val isToday = dayName == "Vendredi"
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(if (isToday) Color(0xFF6366F1) else Color(0xFF1E2125))
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
-                ) {
-                    Text(
-                        text = dayName,
-                        color = if (isToday) Color.White else Color.Gray,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
-                    )
-                }
+            Column {
+                Text("Gestion du Planning & RDV", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                Text("Planifiez des blocs de cours et rendez-vous", color = Color.Gray, fontSize = 12.sp)
+            }
+
+            Button(
+                onClick = { showAddDialog = true },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6366F1)),
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.testTag("add_appointment_button")
+            ) {
+                Icon(imageVector = Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Planifier", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        if (groups.isEmpty()) {
+        // --- CALENDAR CARD WIDGET ---
+        PremiumCard(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.fillMaxWidth().padding(4.dp)) {
+                // Calendar Header (Month Switcher)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = {
+                        if (selectedMonth == 1) {
+                            selectedMonth = 12
+                            selectedYear--
+                        } else {
+                            selectedMonth--
+                        }
+                    }) {
+                        Icon(imageVector = Icons.Default.ChevronLeft, contentDescription = "Mois précédent", tint = Color.White)
+                    }
+
+                    Text(
+                        text = "${monthNames[selectedMonth - 1]} $selectedYear",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+
+                    IconButton(onClick = {
+                        if (selectedMonth == 12) {
+                            selectedMonth = 1
+                            selectedYear++
+                        } else {
+                            selectedMonth++
+                        }
+                    }) {
+                        Icon(imageVector = Icons.Default.ChevronRight, contentDescription = "Mois suivant", tint = Color.White)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Days of week header
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    listOf("Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim").forEach { day ->
+                        Text(
+                            text = day,
+                            color = Color.Gray,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Monthly Grid of days
+                var currentDayCount = 1
+                val totalSlots = daysInMonth + startDayOfWeek
+                val rows = (totalSlots + 6) / 7
+
+                for (row in 0 until rows) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        for (col in 0 until 7) {
+                            val slotIndex = row * 7 + col
+                            if (slotIndex < startDayOfWeek || currentDayCount > daysInMonth) {
+                                Spacer(modifier = Modifier.weight(1f))
+                            } else {
+                                val dayNum = currentDayCount
+                                val isSelected = dayNum == selectedDay
+                                val slotDateStr = String.format("%04d-%02d-%02d", selectedYear, selectedMonth, dayNum)
+                                val hasAppointment = appointments.any { it.date == slotDateStr }
+
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .aspectRatio(1.1f)
+                                        .padding(2.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(
+                                            if (isSelected) Color(0xFF6366F1)
+                                            else if (hasAppointment) Color(0xFF1E1B4B)
+                                            else Color.Transparent
+                                        )
+                                        .clickable { selectedDay = dayNum }
+                                        .padding(4.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text(
+                                            text = dayNum.toString(),
+                                            color = if (isSelected) Color.White else Color.White,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            fontSize = 12.sp
+                                        )
+                                        if (hasAppointment && !isSelected) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .padding(top = 2.dp)
+                                                    .size(4.dp)
+                                                    .clip(CircleShape)
+                                                    .background(Color(0xFF818CF8))
+                                            )
+                                        }
+                                    }
+                                }
+                                currentDayCount++
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // --- APPOINTMENTS LIST FOR THE SELECTED DAY ---
+        Text(
+            text = "Rendez-vous du $selectedDay ${monthNames[selectedMonth - 1]}",
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+
+        if (activeAppointments.isEmpty()) {
             EmptyStateView(
-                title = "Aucun cours planifié",
-                description = "Ajoutez des groupes d'élèves pour que l'emploi du temps se génère automatiquement.",
+                title = "Aucun rendez-vous ce jour",
+                description = "Planifiez un cours ou un entretien individuel pour ce jour en cliquant sur le bouton Planifier.",
                 icon = Icons.Default.CalendarToday
             )
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(groups) { group ->
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(activeAppointments) { appointment ->
+                    val linkedStudent = students.find { it.id == appointment.studentId }
                     PremiumCard(modifier = Modifier.fillMaxWidth()) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1350,24 +1510,175 @@ fun PlanningPane(viewModel: EduViewModel, groups: List<SchoolGroup>) {
                                     modifier = Modifier
                                         .size(44.dp)
                                         .clip(RoundedCornerShape(8.dp))
-                                        .background(Color(0xFF1F1C2C)),
+                                        .background(Color(0xFF1E1B4B)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(imageVector = Icons.Default.Schedule, contentDescription = null, tint = Color(0xFFA5B4FC))
                                 }
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column {
-                                    Text(group.name, color = Color.White, fontWeight = FontWeight.Bold)
-                                    Text("Matière: ${group.subject} | Prof: ${group.teacherName}", color = Color.Gray, fontSize = 12.sp)
-                                    Text("Créneau : ${group.timeSlot} | ${group.dayOfWeek}", color = Color(0xFF818CF8), fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                    Text(appointment.title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Text(
+                                        text = "Élève: ${linkedStudent?.firstName ?: ""} ${linkedStudent?.lastName ?: "Non assigné"}",
+                                        color = Color.White,
+                                        fontSize = 12.sp
+                                    )
+                                    Text(
+                                        text = "Créneau: ${appointment.timeSlot}",
+                                        color = Color(0xFF818CF8),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    if (appointment.notes.isNotEmpty()) {
+                                        Text(
+                                            text = "Note: ${appointment.notes}",
+                                            color = Color.Gray,
+                                            fontSize = 11.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                 }
                             }
-                            StatusBadge(text = group.room, status = "NEUTRAL")
+
+                            IconButton(
+                                onClick = { viewModel.deleteAppointment(appointment.id) },
+                                modifier = Modifier.testTag("delete_appointment_button_${appointment.id}")
+                            ) {
+                                Icon(imageVector = Icons.Default.Delete, contentDescription = "Supprimer", tint = Color(0xFFEF4444))
+                            }
                         }
                     }
                 }
             }
         }
+    }
+
+    // --- ADD APPOINTMENT DIALOG ---
+    if (showAddDialog) {
+        var appTitle by remember { mutableStateOf("Soutien Scolaire Individuel") }
+        var selectedStudentId by remember { mutableStateOf<Int?>(null) }
+        var appTimeSlot by remember { mutableStateOf("14:00 - 15:30") }
+        var appNotes by remember { mutableStateOf("") }
+        var isDropdownExpanded by remember { mutableStateOf(false) }
+
+        AlertDialog(
+            onDismissRequest = { showAddDialog = false },
+            title = {
+                Text(
+                    "Nouveau Bloc de Cours / RDV",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text("Date planifiée : $currentFormattedDate", color = Color(0xFF818CF8), fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+
+                    // Title Input
+                    OutlinedTextField(
+                        value = appTitle,
+                        onValueChange = { appTitle = it },
+                        label = { Text("Intitulé / Sujet") },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+                    )
+
+                    // Student Dropdown/Selector
+                    Text("Sélectionner l'élève :", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                    if (students.isEmpty()) {
+                        Text("Aucun élève inscrit dans votre académie.", color = Color.Gray, fontSize = 12.sp)
+                    } else {
+                        val currentSelectedStudentName = students.find { it.id == selectedStudentId }?.let { "${it.firstName} ${it.lastName}" } ?: "Choisir un élève..."
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF1E2125))
+                                .border(1.dp, Color(0xFF2E3035), RoundedCornerShape(8.dp))
+                                .clickable { isDropdownExpanded = true }
+                                .padding(12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(currentSelectedStudentName, color = Color.White, fontSize = 13.sp)
+                                Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = null, tint = Color.Gray)
+                            }
+
+                            DropdownMenu(
+                                expanded = isDropdownExpanded,
+                                onDismissRequest = { isDropdownExpanded = false },
+                                modifier = Modifier.background(Color(0xFF1E2125))
+                            ) {
+                                students.forEach { student ->
+                                    DropdownMenuItem(
+                                        text = { Text("${student.firstName} ${student.lastName}", color = Color.White) },
+                                        onClick = {
+                                            selectedStudentId = student.id
+                                            isDropdownExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Time Slot Input
+                    OutlinedTextField(
+                        value = appTimeSlot,
+                        onValueChange = { appTimeSlot = it },
+                        label = { Text("Créneau horaire (ex: 14:00 - 15:30)") },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+                    )
+
+                    // Notes Input
+                    OutlinedTextField(
+                        value = appNotes,
+                        onValueChange = { appNotes = it },
+                        label = { Text("Notes / Détails") },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val targetStudentId = selectedStudentId
+                        if (targetStudentId != null && appTitle.isNotEmpty()) {
+                            viewModel.addAppointment(
+                                Appointment(
+                                    studentId = targetStudentId,
+                                    title = appTitle,
+                                    date = currentFormattedDate,
+                                    timeSlot = appTimeSlot,
+                                    notes = appNotes
+                                )
+                            )
+                            showAddDialog = false
+                        }
+                    },
+                    enabled = selectedStudentId != null && appTitle.isNotEmpty(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                ) {
+                    Text("Valider", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddDialog = false }) {
+                    Text("Annuler", color = Color.Gray)
+                }
+            },
+            containerColor = Color(0xFF111317)
+        )
     }
 }
 
@@ -2269,6 +2580,7 @@ fun AssistantAiPane(viewModel: EduViewModel) {
 fun SettingsPane(viewModel: EduViewModel, userType: String?) {
     val language by viewModel.currentLanguage.collectAsState()
     val isDarkMode by viewModel.isDarkMode.collectAsState()
+    val currentUser by viewModel.currentUser.collectAsState()
 
     Column(
         modifier = Modifier
@@ -2276,13 +2588,18 @@ fun SettingsPane(viewModel: EduViewModel, userType: String?) {
             .verticalScroll(rememberScrollState())
     ) {
         PremiumCard(modifier = Modifier.fillMaxWidth()) {
-            Text("Mon Profil Administrateur", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text(
+                text = if (currentUser?.role == "TUTOR") "Mon Profil Enseignant" else "Mon Profil Administrateur",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp
+            )
             Spacer(modifier = Modifier.height(12.dp))
 
             listOf(
-                "Nom complet" to "Prof. Farouk Bouayed",
-                "Téléphone" to "+213 555 12 34 56",
-                "Adresse" to "Hydra, Alger, Algérie",
+                "Nom complet" to (currentUser?.fullName ?: "Prof. Farouk Bouayed"),
+                "Adresse e-mail" to (currentUser?.email ?: "farouk.bouayed@edumanager.ai"),
+                "Adresse locale" to "Hydra, Alger, Algérie",
                 "Type de compte" to if (userType == "TUTOR") "Professeur Particulier" else if (userType == "ACADEMY") "Académie de Soutien" else "École Privée ERP"
             ).forEach { (label, value) ->
                 Row(modifier = Modifier.padding(vertical = 4.dp)) {
@@ -2342,7 +2659,22 @@ fun SettingsPane(viewModel: EduViewModel, userType: String?) {
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Button(
+            onClick = { viewModel.logoutUser() },
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF374151)),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp)
+                .testTag("logout_button")
+        ) {
+            Icon(imageVector = Icons.Default.Logout, contentDescription = null, tint = Color.White)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Se déconnecter de la session", color = Color.White, fontWeight = FontWeight.Bold)
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
 
         Button(
             onClick = { viewModel.resetApp() },

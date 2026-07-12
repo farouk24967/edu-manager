@@ -108,3 +108,22 @@ data class AppMessage(
     val content: String,
     val timestamp: Long = System.currentTimeMillis()
 )
+
+@Entity(tableName = "users")
+data class User(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val email: String,
+    val passwordHash: String,
+    val role: String, // "TUTOR" or "ADMIN"
+    val fullName: String
+)
+
+@Entity(tableName = "appointments")
+data class Appointment(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val studentId: Int,
+    val title: String,
+    val date: String, // YYYY-MM-DD
+    val timeSlot: String, // e.g. 14:00 - 15:30
+    val notes: String = ""
+)

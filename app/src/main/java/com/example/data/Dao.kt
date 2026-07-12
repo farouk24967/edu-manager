@@ -125,4 +125,21 @@ interface EduDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMessage(message: AppMessage): Long
+
+    // --- Local Users (Auth Fallback) ---
+    @Query("SELECT * FROM users WHERE email = :email LIMIT 1")
+    suspend fun getUserByEmail(email: String): User?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertUser(user: User): Long
+
+    // --- Appointments (Tutoring Calendar Blocks) ---
+    @Query("SELECT * FROM appointments ORDER BY date ASC, timeSlot ASC")
+    fun getAllAppointmentsFlow(): Flow<List<Appointment>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAppointment(appointment: Appointment): Long
+
+    @Query("DELETE FROM appointments WHERE id = :id")
+    suspend fun deleteAppointmentById(id: Int)
 }
