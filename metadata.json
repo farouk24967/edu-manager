@@ -1,0 +1,6 @@
+{
+  "name": "EduManager AI",
+  "description": "SaaS platform for private tutors, academies, and private schools with integrated AI assistant features.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
